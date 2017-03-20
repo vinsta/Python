@@ -5,7 +5,6 @@ import datetime
 #import objgraph
 
 class DayCounter(tkinter.Frame):
-	isStart = False
 	#num = 0
 	
 	def __init__ (self, master=None, cnf={}, **kw):
@@ -16,12 +15,42 @@ class DayCounter(tkinter.Frame):
 		#self.master.rowconfigure(0, weight = 1)
 		#self.master.columnconfigure(0, weight = 1)
 		#self.pack()
-		self.InitCounterUI()
+		self.InitUI()
 
-	def InitCounterUI (self):
+	def InitUI (self):
+		nameframe = tkinter.Frame(self.master)
+		nameframe.pack(pady = 4)
+		self.project = tkinter.StringVar(value = "项目名称")
+		tkinter.Label(nameframe, width = 10, textvariable = self.project, font = ('仿宋', '20', 'bold')).pack()
+
+		dataframe = tkinter.Frame(self.master)
+		dataframe.pack()
+		tkinter.Label(dataframe, text = "第").pack(side = "left", padx = 8)
+		self.lbDays = tkinter.Label(dataframe, text = "0", fg = "red", font = ('Arial', '36', 'bold'))
+		self.lbDays.pack(side = "left")
+		tkinter.Label(dataframe, text = "天").pack(side = "left", padx = 8)
+
+	def UpdateDays(self, date, text):
+		today = datetime.date.today()
+		self.lbDays.configure(text = (today - date).days)
+		self.project.set(text)
+		#self.lbDays.configure(text = str(self.num+1))
+		#self.num += 1
+
+class DayCounterSetting(tkinter.Toplevel):
+	isStart = False
+
+	def __init__ (self, master=None, cnf={}, **kw):
+		self.master = master
+		self.master.resizable(False, False)
+		self.master.title('安全生产计时器设置')
+		self.InitUI()
+
+	def InitUI (self):
 		infoframe = tkinter.Frame(self.master)
-		infoframe.pack(pady = 8)
-		tkinter.Entry(infoframe, font = ('仿宋', '20', 'bold')).pack()
+		infoframe.pack(pady = 8, fill = "x")
+		self.project = tkinter.StringVar()
+		tkinter.Entry(infoframe, textvariable = self.project).pack()
 
 		dateframe = tkinter.Frame(self.master)
 		dateframe.pack()
@@ -47,13 +76,6 @@ class DayCounter(tkinter.Frame):
 		self.btnStop = tkinter.Button(btnframe, text = "停止计数", command = lambda:self.StopCount(), relief = "groove", state = "disabled")
 		self.btnStop.pack(side = "left")
 
-		dataframe = tkinter.Frame(self.master)
-		dataframe.pack()
-		tkinter.Label(dataframe, text = "第").pack(side = "left", padx = 8)
-		self.lbDays = tkinter.Label(dataframe, text = "0", fg = "red", font = ('Arial', '36', 'bold'))
-		self.lbDays.pack(side = "left")
-		tkinter.Label(dataframe, text = "天").pack(side = "left", padx = 8)
-		
 	def InitYearCombobox(self):
 		year = datetime.date.today().year
 		yearList = list(range(year-100, year+1))
@@ -100,10 +122,5 @@ class DayCounter(tkinter.Frame):
 		self.dayChosen.configure(state = "normal")
 		self.isStart = False
 
-	def UpdateDays(self):
-		today = datetime.date.today()
-		if self.isStart is True:
-			startDate = datetime.date(int(self.yearChosen.get()), int(self.monthChosen.get()), int(self.dayChosen.get()))
-			self.lbDays.configure(text = (today - startDate).days)
-			#self.lbDays.configure(text = str(self.num+1))
-			#self.num += 1
+	def isStart(self):
+		return self.isStart

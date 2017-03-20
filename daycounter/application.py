@@ -3,6 +3,7 @@ import win32con, winerror
 import sys, os
 from tkinter import *
 import threading
+import datetime
 import daycounter
 
 class SystemTrayIcon:
@@ -14,6 +15,12 @@ class SystemTrayIcon:
                 win32con.WM_COMMAND: self.OnCommand,
                 win32con.WM_USER+20 : self.OnTaskbarNotify,
         }
+        self.menu = win32gui.CreatePopupMenu()#产生一个菜单句柄menu
+        win32gui.AppendMenu(self.menu, win32con.MF_STRING, 1023, "显示/隐藏窗口")#给菜单添加子项，1027可以一直下去
+        win32gui.AppendMenu(self.menu, win32con.MF_STRING, 1024, "设置")
+        win32gui.AppendMenu(self.menu, win32con.MF_STRING, 1025, "退出程序")
+        #win32gui.EnableMenuItem(menu,1023,win32con.MF_GRAYED)#是用菜单句柄，对菜单进行操作
+
         # Register the Window class.
         self.wc = win32gui.WNDCLASS()#局部变量wc改成窗口类的实例
         hinst = self.wc.hInstance = win32api.GetModuleHandle(None)#获得程序模块句柄
@@ -64,7 +71,7 @@ class SystemTrayIcon:
             hicon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)
 
         flags = win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP | win32gui.NIF_INFO#定义托盘图标的样式
-        nid = (self.hwnd, 0, flags, win32con.WM_USER+20, hicon, "安全生产计时器","安全生产计时器已创建系统托盘图标")
+        nid = (self.hwnd, 0, flags, win32con.WM_USER+20, hicon, "安全生产计时器","安全生产计时器系统托盘图标")
         #最后一个选项猪已经跑。。”是气泡提示内容
         try:
             win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)#增加系统托盘图标
@@ -90,17 +97,12 @@ class SystemTrayIcon:
             self.SwitchWindow()
             #win32gui.DestroyWindow(self.hwnd)
             #win32gui.UnregisterClass(self.wc.lpszClassName,None)
-        elif lparam==win32con.WM_RBUTTONUP:
-            menu = win32gui.CreatePopupMenu()#产生一个菜单句柄menu
-            win32gui.AppendMenu( menu, win32con.MF_STRING, 1023, "显示/隐藏窗口")#给菜单添加子项，1027可以一直下去
-            win32gui.AppendMenu( menu, win32con.MF_STRING, 1024, "退出程序")
-            #win32gui.EnableMenuItem(menu,1023,win32con.MF_GRAYED)#是用菜单句柄，对菜单进行操作
-            
+        elif lparam==win32con.WM_RBUTTONUP:        
             pos = win32gui.GetCursorPos()
             # See http://msdn.microsoft.com/library/default.asp?url=/library/en-us/winui/menus_0hdi.asp
             win32gui.SetForegroundWindow(self.hwnd)
             
-            win32gui.TrackPopupMenu(menu, win32con.TPM_LEFTALIGN, pos[0], pos[1], 0, self.hwnd, None)#显示并获取选中的菜单
+            win32gui.TrackPopupMenu(self.menu, win32con.TPM_LEFTALIGN, pos[0], pos[1], 0, self.hwnd, None)#显示并获取选中的菜单
             win32gui.PostMessage(self.hwnd, win32con.WM_NULL, 0, 0)#忽略当前事件消息
         return 1
 
@@ -113,9 +115,14 @@ class SystemTrayIcon:
             #import win32gui_dialog
             #win32api.MessageBox(0,"hello",win32con.MB_OK)
         elif id == 1024:
+            config.deiconify()
+        elif id == 1025:
+            nid = (self.hwnd, 0)
+            win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, nid)
             root.destroy()
             win32gui.DestroyWindow(self.hwnd)
             win32gui.UnregisterClass(self.wc.lpszClassName,None)
+            #win32gui.PostQuitMessage(0) # Terminate the app.
         else:
             print ("Unknown command -", id)
 
@@ -133,24 +140,35 @@ def StartIcon():
 def createTray():
     SystemTrayIcon()
 
-def OnClose():
+def OnCloseRoot():
     root.withdraw()
 
+def OnCloseConfig():
+    config.withdraw()
+
 def UpdateUI():
-    for i in range(len(counters)):
-        counters[i].UpdateDays()
+    for i in range(len(dc)):
+        if dcconfig[i].isStart is True:
+            dc[i].UpdateDays(datetime.date(int(dcconfig[i].yearChosen.get()), 
+                int(dcconfig[i].monthChosen.get()), int(dcconfig[i].dayChosen.get())),
+            dcconfig[i].project.get())
     root.after(1000, UpdateUI)
 
 def main():
-    root.wm_protocol("WM_DELETE_WINDOW", OnClose)
+    root.wm_protocol("WM_DELETE_WINDOW", OnCloseRoot)
+    config.wm_protocol("WM_DELETE_WINDOW", OnCloseConfig)
+    config.withdraw()
     for i in range(3):
-        counters.append(daycounter.DayCounter(root))
+        dc.append(daycounter.DayCounter(root))
+        dcconfig.append(daycounter.DayCounterSetting(config))
     StartIcon()
     UpdateUI()
     root.mainloop()
 
 root = Tk()
-counters = []
+config = Toplevel(root)
+dc = []
+dcconfig = []
 
 if __name__=='__main__':
     main()
