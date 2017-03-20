@@ -3,6 +3,7 @@ import win32con, winerror
 import sys, os
 from tkinter import *
 import threading
+import glob
 import datetime
 import daycounter
 
@@ -49,19 +50,18 @@ class SystemTrayIcon:
         # Try and find a custom icon
         hinst =  win32api.GetModuleHandle(None)
         
-        iconPathName = os.path.abspath(os.path.join( os.getcwd(), "counter.ico" ))
-        print(iconPathName)
-        if not os.path.isfile(iconPathName):#当前路径
-            print(iconPathName)
-            iconPathName = os.path.abspath(os.path.join( os.path.split(sys.executable)[0], "pyc.ico" ))#sys.executalbe为python解释程序路径
+        icons = glob.glob("*.ico")
+        if len(icons) > 0:
+            iconPathName = os.path.abspath(os.path.join( os.getcwd(), icons[0]))
+        else:
+            iconPathName = os.path.abspath(os.path.join( os.path.split(sys.executable)[0], "pyc.ico" ))
+            #sys.executalbe为python解释程序路径
         if not os.path.isfile(iconPathName):#如果系统ico文件不存在
             # Look in DLLs dir, a-la py 2.5
             iconPathName = os.path.abspath(os.path.join( os.path.split(sys.executable)[0], "DLLs", "pyc.ico" ))
-            print(iconPathName)
         if not os.path.isfile(iconPathName):
             # Look in the source tree.
             iconPathName = os.path.abspath(os.path.join( os.path.split(sys.executable)[0], "..\\PC\\pyc.ico" ))
-            print(iconPathName)
         if os.path.isfile(iconPathName):
             icon_flags = win32con.LR_LOADFROMFILE | win32con.LR_DEFAULTSIZE#ico标识，从文件载入和默认大小
             hicon = win32gui.LoadImage(hinst, iconPathName, win32con.IMAGE_ICON, 0, 0, icon_flags)#载入.ico文件
