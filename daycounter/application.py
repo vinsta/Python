@@ -148,10 +148,8 @@ def OnCloseConfig():
 
 def UpdateUI():
     for i in range(len(dc)):
-        if dcconfig[i].isStart is True:
-            dc[i].UpdateDays(datetime.date(int(dcconfig[i].yearChosen.get()), 
-                int(dcconfig[i].monthChosen.get()), int(dcconfig[i].dayChosen.get())),
-            dcconfig[i].project.get())
+        if dcconfig[i].GetState() is True:
+            dc[i].UpdateDays(dcconfig[i].GetDate(), dcconfig[i].GetProjName())
     root.after(1000, UpdateUI)
 
 def main():
@@ -160,7 +158,7 @@ def main():
     config.withdraw()
     for i in range(3):
         dc.append(daycounter.DayCounter(root))
-        dcconfig.append(daycounter.DayCounterSetting(config))
+        dcconfig.append(daycounter.DayCounterSetting(config, i))
     StartIcon()
     UpdateUI()
     root.mainloop()

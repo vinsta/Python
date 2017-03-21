@@ -2,6 +2,7 @@ import tkinter
 import tkinter.ttk
 #import calendar
 import datetime
+import sqlite3
 #import objgraph
 
 class DayCounter(tkinter.Frame):
@@ -16,6 +17,7 @@ class DayCounter(tkinter.Frame):
 		#self.master.columnconfigure(0, weight = 1)
 		#self.pack()
 		self.InitUI()
+
 
 	def InitUI (self):
 		nameframe = tkinter.Frame(self.master)
@@ -38,19 +40,56 @@ class DayCounter(tkinter.Frame):
 		#self.num += 1
 
 class DayCounterSetting(tkinter.Toplevel):
-	isStart = False
 
-	def __init__ (self, master=None, cnf={}, **kw):
+	def __init__ (self, master=None, id = 0, cnf={}, **kw):
 		self.master = master
 		self.master.resizable(False, False)
 		self.master.title('安全生产计时器设置')
+		self.id = id
+		self.DbLoad()
+
 		self.InitUI()
+
+	def DbLoad(self):
+		dbconn = sqlite3.connect("data.db")
+		cursor = dbconn.cursor()
+		cursor.execute("create table if not exists counter (id int primary key, name varchar(10), year int, month int, day int, state bool)")
+		dbexist = False
+		for row in cursor.execute("select * from counter where counter.id = ?", (self.id,)):
+			dbexist = True
+			self.name = row[1]
+			self.year = row[2]
+			self.month = row[3]
+			self.day = row[4]
+			if row[5] == 1:
+				self.state = True
+			else:
+				self.state = False
+		if dbexist is False:
+			self.name = ""
+			date = datetime.date.today()
+			self.year = date.year
+			self.month = date.month
+			self.day = date.day
+			self.state = False
+		dbconn.close()
+
+	def DbUpdate(self):
+		dbconn = sqlite3.connect("data.db")
+		cursor = dbconn.cursor()
+		cursor.execute("delete from counter where id = ?", (self.id,))
+		cursor.execute("insert into counter (id, name, year, month, day, state) values (?, ?, ?, ?, ?, ?)", 
+			(self.id, self.name, self.year, self.month, self.day, self.state))
+		dbconn.commit()
+		dbconn.close()
 
 	def InitUI (self):
 		infoframe = tkinter.Frame(self.master)
 		infoframe.pack(pady = 8, fill = "x")
 		self.project = tkinter.StringVar()
-		tkinter.Entry(infoframe, textvariable = self.project).pack()
+		self.project.set(self.name)
+		self.etProj = tkinter.Entry(infoframe, textvariable = self.project)
+		self.etProj.pack()
 
 		dateframe = tkinter.Frame(self.master)
 		dateframe.pack()
@@ -73,38 +112,42 @@ class DayCounterSetting(tkinter.Toplevel):
 		self.btnStart = tkinter.Button(btnframe, text = "开始计数", command = lambda:self.StartCount(), relief = "groove")
 		self.btnStart.pack(side = "left")
 		tkinter.Button(btnframe, width = 6, relief = "flat").pack(side = "left")
-		self.btnStop = tkinter.Button(btnframe, text = "停止计数", command = lambda:self.StopCount(), relief = "groove", state = "disabled")
+		self.btnStop = tkinter.Button(btnframe, text = "停止计数", command = lambda:self.StopCount(), relief = "groove")
 		self.btnStop.pack(side = "left")
 
+		if self.state is True:
+			self.btnStart.configure(state = "disabled")
+			self.etProj.configure(state = "disabled")
+		else:
+			self.btnStop.configure(state = "disabled")
+
 	def InitYearCombobox(self):
-		year = datetime.date.today().year
-		yearList = list(range(year-100, year+1))
+		yearList = list(range(self.year-100, self.year+1))
 		yearList.reverse()
 		self.yearChosen['values'] = yearList
 		self.yearChosen.current(0)
 
 	def InitMonthCombobox(self):
 		self.monthChosen['values'] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
-		self.monthChosen.current(datetime.date.today().month - 1)
+		self.monthChosen.current(self.month - 1)
 
 	def InitDayCombobox(self):
-		date = datetime.date.today()
 		daysList = []
 		i = 1
 		while i <= 31:
 			if (i == 29):
-				if (date.month == 2 and date.year%4 != 0):
+				if (self.month == 2 and self.year%4 != 0):
 					break
 			if (i == 30):
-				if (date.month == 2):
+				if (self.month == 2):
 					break
 			if (i == 31):
-				if date.month not in (1, 3, 5, 7, 8, 10, 12):
+				if self.month not in (1, 3, 5, 7, 8, 10, 12):
 					break
 			daysList.append(i)
 			i += 1
 		self.dayChosen['values'] = daysList
-		self.dayChosen.current(date.day-1)
+		self.dayChosen.current(self.day-1)
 
 	def StartCount(self):
 		self.btnStart.configure(state = "disabled")
@@ -112,7 +155,13 @@ class DayCounterSetting(tkinter.Toplevel):
 		self.yearChosen.configure(state = "disabled")
 		self.monthChosen.configure(state = "disabled")
 		self.dayChosen.configure(state = "disabled")
-		self.isStart = True
+		self.etProj.configure(state = "disabled")
+		self.year = int(self.yearChosen.get())
+		self.month = int(self.monthChosen.get())
+		self.day = int(self.dayChosen.get())
+		self.state = True
+		self.name = self.GetProjName()
+		self.DbUpdate()
 
 	def StopCount(self):
 		self.btnStart.configure(state = "normal")
@@ -120,7 +169,15 @@ class DayCounterSetting(tkinter.Toplevel):
 		self.yearChosen.configure(state = "normal")
 		self.monthChosen.configure(state = "normal")
 		self.dayChosen.configure(state = "normal")
-		self.isStart = False
+		self.etProj.configure(state = "normal")
+		self.state = False
+		self.DbUpdate()
 
-	def isStart(self):
-		return self.isStart
+	def GetState(self):
+		return self.state
+
+	def GetProjName(self):
+		return self.project.get()
+
+	def GetDate(self):
+		return datetime.date(self.year, self.month, self.day)
