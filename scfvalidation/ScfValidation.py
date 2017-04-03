@@ -115,12 +115,13 @@ def OpenFile(var, isDirectory = False):
 	if isDirectory is False:
 		filename = tkinter.filedialog.askopenfilename(filetypes=[("xml file", "*.xml")])
 	else:
-		filename = tkinter.filedialog.askdirectory()
-		filename = "{}{}".format(filename, "/log.txt")
-	print(filename)
+		filename = tkinter.filedialog.asksaveasfilename()
+		#filename = tkinter.filedialog.askdirectory()
+		#filename = "{}{}".format(filename, "/log.txt")
 	var.set(filename)
 
 def OnValidate():
+	print(logVar.get())
 	if scfVar.get() == "":
 		print("SCF is not selected!!!")
 		return
