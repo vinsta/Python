@@ -8,7 +8,7 @@ import tkinter.filedialog
 Param = collections.namedtuple("Param", "name mandatory type min max values")
 Mo = collections.namedtuple("Mo", "minoccurs maxoccurs params")
 
-def parseNIDD(filename, modict, paramdict):
+def ParseNIDD(filename, modict, paramdict):
 	print(filename)
 	try:
 		et = ET.parse(filename)
@@ -28,26 +28,27 @@ def parseNIDD(filename, modict, paramdict):
 			if param.tag != "p":
 				continue
 
-			paramname = param.attrib["name"]
-			params.append(paramname)
-
 			if not minoccursfound or not maxoccursfound:
 				for productData in param.iter("productData"):
 					for data in productData:
 						if data.attrib["name"] == "MO MaxOccurs":
 							maxoccurs = data.attrib["value"]
+							param.set("name", "instanceid")
 							maxoccursfound = True
 						elif data.attrib["name"] == "MO MinOccurs":
 							minoccurs = data.attrib["value"]
+							param.set("name", "instanceid")
 							minoccursfound = True
 						if minoccursfound and maxoccursfound:
 							break
+			paramname = param.attrib["name"]
+			params.append(paramname)
 
-			paramdict["{}-{}".format(moname, paramname)] = getParamDetail(param)
+			paramdict["{}-{}".format(moname, paramname)] = GetParamDetail(param)
 
 		modict[moname] = Mo(minoccurs, maxoccurs, params)
 
-def getParamDetail(param):
+def GetParamDetail(param):
 	mandatory = False
 	paramtype = ""
 	minoccurs = 0
@@ -107,7 +108,7 @@ def getParamDetail(param):
 		if complextype is not None:
 			paramtype = "list"
 			for child in complextype:
-				values.append(getParamDetail(child))
+				values.append(GetParamDetail(child))
 
 	return Param(paramname, mandatory, paramtype, minval, maxval, values)
 
@@ -122,29 +123,80 @@ def OpenFile(var, isDirectory = False):
 
 def OnValidate():
 	print(logVar.get())
+	'''
 	if scfVar.get() == "":
 		print("SCF is not selected!!!")
-		return
-	else:
-		try:
-			etscf = ET.parse(scfVar.get())
-		except FileNotFoundError as err:
-			print(err)
-			return
+		return'''
 
 	for file in [mrbtsVar.get(), eqmVar.get(), mnlVar.get(), radioVar.get()]:
 		if file != "":
-			parseNIDD(file, modict, paramdict)
+			ParseNIDD(file, modict, paramdict)
+	#print(modict)
+	#print(paramdict)
 
-	ValidateSCF(etscf, modic, paramdict)
+	ValidateSCF(scfVar.get())
 
-def ValidateSCF():
-	pass
+def ValidateSCF(scf):
+	scf = "I:\\CUPL_BTSA_10139.xml"
+	print(scf)
+	try:
+		etscf = ET.parse(scf)
+		root = etscf.getroot()
+	except FileNotFoundError as err:
+		print(err)
+		return
+
+	cmdata = root.findall("{raml21.xsd}cmData")
+	for data in cmdata:
+		MOs = data.findall("{raml21.xsd}managedObject")
+		for mo in MOs:
+			classname =  mo.attrib["class"]
+			classname = classname[classname.rindex(":") + 1 :]
+			distname = mo.attrib["distName"]
+			if distname.find("/FTM-") != -1:
+				print("FTM class or subclass, ignored!")
+				continue
+			instanceid = distname[distname.rindex("-") + 1 :]
+			print("class = {}, instance = {}".format(classname, instanceid))
+			ValidateInstanceId(classname, instanceid)
+			for param in mo:
+				print(param.attrib)
+				ValidateParamValue(classname, param)
+
+def ValidateInstanceId(classname, id):
+	key = "{}-{}".format(classname, "instanceid")
+	try:
+		if not paramdict[key].min <= id <= paramdict[key].max:
+			print("{} instance id {} is NOK!".format(classname, id))
+		else:
+			print("{} instance id {} is OK!".format(classname, id))
+	except KeyError:
+		print("{} does not exist".format(key))
+
+def ValidateParamValue(classname, param):
+	key = "{}-{}".format(classname, param.attrib["name"])
+	try:
+		paramtype = paramdict[key].type
+	except KeyError:
+		print("{} does not exist".format(key))
+		return
+	
+	if  paramtype == "decimal":
+		pass
+	elif paramtype == "string":
+		pass
+	elif paramtype == "boolean":
+		pass
+	elif paramtype == "enumeration":
+		pass
+	elif paramtype == "bit":
+		pass
+	elif paramtype == "list":
+		pass
 
 if __name__=='__main__':
 	modict = {}
 	paramdict = {}
-	etscf = None
 
 	root = tkinter.Tk()
 	mrbtsVar= tkinter.StringVar()
