@@ -201,12 +201,12 @@ def ValidateMandatoryParams(moname, mo, logfile):
 		#print("unknown param {}".format(err))
 		logfile.write("Unknown parammeter {}\n".format(err))
 
-def ValidateInstanceId(classname, id, logfile):
+def ValidateInstanceId(classname, instid, logfile):
 	key = "{}-{}".format(classname, "instanceid")
 	try:
-		if not paramdict[key].min <= id <= paramdict[key].max:
+		if not paramdict[key].min <= instid <= paramdict[key].max:
 			#print("{} instance id {} is NOK!".format(classname, id))
-			logfile.write("{} instance id {} exceeds range\n".format(classname, id))
+			logfile.write("{} instance id {} exceeds range\n".format(classname, instid))
 	except KeyError:
 		print("{} does not exist".format(key))
 
