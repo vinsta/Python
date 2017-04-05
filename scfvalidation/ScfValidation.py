@@ -24,10 +24,32 @@ def ParseNIDD(filename, modict, paramdict):
 	for mo in MOs:
 		params = []
 		moname = mo.attrib["class"]
+		if moname == "EQM":
+			moname = "MRBTS/EQM"
+		elif moname == "MNL":
+			moname = "MRBTS/MNL"
+		elif moname == "LNBTS":
+			moname = "MRBTS/LNBTS"
 		minoccursfound = False
 		maxoccursfound = False
 		for param in mo:
-			if param.tag != "p":
+			if param.tag == "childManagedObject":
+				simplechildmoname = param.attrib["class"]
+				complexchildmoname = "{}/{}".format(moname, simplechildmoname)
+				for item in modict:
+					if item == simplechildmoname:
+						modict[complexchildmoname] = modict[item]
+						modict.pop(item)
+						break
+					else:
+						pos = item.find("/")
+						if pos != -1 and item[: pos] == simplechildmoname:
+							complexchildmoname = item.replace("{}/".format(simplechildmoname), "{}/".format(complexchildmoname))
+							modict[complexchildmoname] = modict[item]
+							modict.pop(item)
+				modict.setdefault(complexchildmoname)
+				continue
+			elif param.tag != "p":
 				continue
 
 			if not minoccursfound or not maxoccursfound:
@@ -48,7 +70,19 @@ def ParseNIDD(filename, modict, paramdict):
 
 			paramdict["{}-{}".format(moname, paramname)] = GetParamDetail(param)
 
-		modict[moname] = Mo(minoccurs, maxoccurs, params)
+		found = False
+		for item in modict:
+			pos = item.rfind("/")
+			if pos != -1 and item[pos + 1 :] == moname:
+				found = True
+				modict[item] = Mo(minoccurs, maxoccurs, params)
+				break
+		if found is False:
+				modict[moname] = Mo(minoccurs, maxoccurs, params)
+
+		for mo in modict:
+			print("{}:{}".format(mo, modict[mo]))
+
 
 def GetParamDetail(param):
 	mandatory = False
@@ -138,13 +172,13 @@ def OnValidate():
 	for file in [mrbtsVar.get(), eqmVar.get(), mnlVar.get(), radioVar.get()]:
 		if file != "":
 			ParseNIDD(file, modict, paramdict)
-	'''
-	for mo in modict:
-		print("{}:{}".format(mo, modict[mo]))
-	for param in paramdict:
-		print("{}:{}".format(param, paramdict[param]))
-	'''
-	ValidateSCF(scfVar.get())
+	
+	#for mo in modict:
+		#print("{}:{}".format(mo, modict[mo]))
+	#for param in paramdict:
+		#print("{}:{}".format(param, paramdict[param]))
+	
+	#ValidateSCF(scfVar.get())
 	tkinter.messagebox.showinfo(title = "Information", message = "SCF validation complete!")
 
 def ValidateSCF(scf):
