@@ -4,9 +4,13 @@ import collections
 import tkinter
 import tkinter.ttk
 import tkinter.filedialog
+import tkinter.messagebox
 
 Param = collections.namedtuple("Param", "name mandatory type min max values")
 Mo = collections.namedtuple("Mo", "minoccurs maxoccurs params")
+modict = {}
+paramdict = {}
+logfile = None
 
 def ParseNIDD(filename, modict, paramdict):
 	print(filename)
@@ -82,8 +86,8 @@ def GetParamDetail(param):
 			else:
 				shift = 0
 			paramrange = editing.find("range")
-			minval = (float(paramrange.attrib["minIncl"]) - shift) * divisor / multiplicand
-			maxval = (float(paramrange.attrib["maxIncl"]) - shift) * divisor / multiplicand
+			minval = int((float(paramrange.attrib["minIncl"]) - shift) * divisor / multiplicand)
+			maxval = int((float(paramrange.attrib["maxIncl"]) - shift) * divisor // multiplicand)
 		elif paramtype == "string":
 			for child in simpletype:
 				if child.tag == "minLength":
@@ -123,8 +127,8 @@ def OpenFile(var, isDirectory = False):
 	var.set(filename)
 
 def OnValidate():
-	modict = {}
-	paramdict = {}
+	modict.clear()
+	paramdict.clear()
 	print(logVar.get())
 	'''
 	if scfVar.get() == "":
@@ -134,19 +138,24 @@ def OnValidate():
 	for file in [mrbtsVar.get(), eqmVar.get(), mnlVar.get(), radioVar.get()]:
 		if file != "":
 			ParseNIDD(file, modict, paramdict)
-	print(modict)
-	print(paramdict)
-
+	'''
+	for mo in modict:
+		print("{}:{}".format(mo, modict[mo]))
+	for param in paramdict:
+		print("{}:{}".format(param, paramdict[param]))
+	'''
 	ValidateSCF(scfVar.get())
+	tkinter.messagebox.showinfo(title = "Information", message = "SCF validation complete!")
 
 def ValidateSCF(scf):
-	scf = "I:\\CUPL_BTSA_10139.xml"
-	logfilename = "I:\\scfvalidation.log"
+	scf = "d:\\tmp\\CUPL_BTSA_10139.xml"
+	logfilename = "d:\\tmp\\scfvalidation.log"
 
 	try:
 		etscf = ET.parse(scf)
 		root = etscf.getroot()
 		logfile = open(logfilename, "w", encoding = "utf8")
+		logfile.write("{} validattion begin\n".format(logfilename))
 	except FileNotFoundError as err:
 		print(err)
 		return
@@ -162,12 +171,14 @@ def ValidateSCF(scf):
 				#print("FTM class or subclass, ignored!")
 				continue
 			instanceid = distname[distname.rindex("-") + 1 :]
-			ValidateInstanceId(classname, int(instanceid), logfile)
-			for param in mo:
-				key = "{}-{}".format(classname, param.attrib["name"])
-				ValidateParamValue(key, param, logfile)
+			result = ValidateInstanceId(classname, int(instanceid), logfile)
+			if result is True:
+				for param in mo:
+					key = "{}-{}".format(classname, param.attrib["name"])
+					ValidateParamValue(key, param, logfile)
 
-		ValidateMandatoryParams(classname, mo, logfile)
+			ValidateMandatoryParams(classname, mo, logfile)
+	logfile.write("{} validation end\n".format(logfilename))
 	logfile.close()
 
 def ValidateMandatoryParams(moname, mo, logfile):
@@ -198,65 +209,66 @@ def ValidateMandatoryParams(moname, mo, logfile):
 								if found is False:
 									logfile.write("mandatory parameter {}-{} is missing!\n".format(key, value.name))
 	except KeyError as err:
-		#print("unknown param {}".format(err))
-		logfile.write("Unknown parammeter {}\n".format(err))
+		print("Unknown object {}!".format(err))
+		#logfile.write("Unknown parammeter {}!\n".format(err))
 
 def ValidateInstanceId(classname, instid, logfile):
+	result = True
 	key = "{}-{}".format(classname, "instanceid")
 	try:
 		if not paramdict[key].min <= instid <= paramdict[key].max:
-			#print("{} instance id {} is NOK!".format(classname, id))
-			logfile.write("{} instance id {} exceeds range\n".format(classname, instid))
+			logfile.write("{} instance id {} exceeds range {}-{}!\n".format(classname, instid, paramdict[key].min, paramdict[key].max))
+			result = False
 	except KeyError:
-		print("{} does not exist".format(key))
+		logfile.write("Unknown object {}!\n".format(classname))
+		result = False
+	return result
 
 def ValidateParamValue(key, param, logfile, islist = False):
 	paramname = param.attrib["name"]
 	try:
-		paramtype = paramdict[key].type
+		if islist is True:
+			for item in paramdict[key].values:
+				if item.name == paramname:
+					paramtype = item.type
+					minval = item.min
+					maxval = item.max
+					special = item.values
+					break
+		else:
+			paramtype = paramdict[key].type
+			minval = paramdict[key].min
+			maxval = paramdict[key].max
+			special = paramdict[key].values
+
+		if  paramtype == "decimal":
+			if not  minval <= int(param.text) <= maxval and param.text not in special:
+				logfile.write("{}-{} value {} exceeds range {}-{}!\n".format(key, paramname, param.text, minval, maxval))
+		elif paramtype == "string":
+			if not minval <= len(param.text) <= maxval and param.text not in special:
+				logfile.write("{}-{} value length {} exceeds range {}-{}!\n".format(key, paramname, len(param.text), minval, maxval))
+		elif paramtype == "boolean":
+			if param.text not in ("true", "false"):
+				logfile.write("{}-{} value {} is not 'true' or 'false'!\n".format(key, paramname, param.text))
+		elif paramtype == "enumeration":
+			if param.text not in special:
+				logfile.write("{}-{} value {} is not in range {}!\n".format(key, paramname, param.text, special))
+		elif paramtype == "bit":
+			if (int(param.text) & 0xFFFF) > maxval:
+				logfile.write("{}-{} value {} is not in range {}!\n".format(key, paramname, param.text, special))
+		elif paramtype == "list":
+			for item in param.findall("{raml21.xsd}item"):
+				for listparam in item:
+					ValidateParamValue(key, listparam, logfile, True)
 	except KeyError:
 		logfile.write("Unknown parameter {}\n".format(key))
 		#print("{} does not exist".format(key))
 		return
-	
-	if islist is True:
-		for item in paramdict[key].values:
-			if item.name == paramname:
-				minval = item.min
-				maxval = item.max
-				special = item.values
-				break
-	else:
-		minval = paramdict[key].min
-		maxval = paramdict[key].max
-		special = paramdict[key].values
-
-	if  paramtype == "decimal":
-		if not  minval <= int(param.text) <= maxval and param.text not in special:
-			logfile.write("{}-{} value exceeds range\n".format(key, paramname))
-	elif paramtype == "string":
-		if not minval <= len(param.text) <= maxval and param.text not in special:
-			logfile.write("{}-{} value length exceeds range\n".format(key, paramname))
-	elif paramtype == "boolean":
-		if param.text not in ("true", "false"):
-			logfile.write("{}-{} value is not 'true' or 'false'\n".format(key, paramname))
-	elif paramtype == "enumeration":
-		if param.text not in special:
-			logfile.write("{}-{} value is not in range\n".format(key, paramname))
-	elif paramtype == "bit":
-		if (int(param.text) & 0xFFFF) > maxval:
-			logfile.write("{}-{} value is not in range\n".format(key, paramname))
-	elif paramtype == "list":
-		for item in param.findall("{raml21.xsd}item"):
-			for listparam in item:
-				ValidateParamValue(key, listparam, logfile, True)
 
 if __name__=='__main__':
-	modict = {}
-	paramdict = {}
 
 	root = tkinter.Tk()
-	root.title = "SCF Validation"
+	root.title("SCF Validation")
 	mrbtsVar= tkinter.StringVar()
 	tkinter.ttk.Button(root, text = "MRBTS", command = lambda:OpenFile(mrbtsVar)).grid(row = 0, column = 0, padx = 4, pady = 4)
 	tkinter.ttk.Entry(root, textvariable = mrbtsVar, width = 30).grid(row = 0, column  = 1, padx = 4, pady = 4)
