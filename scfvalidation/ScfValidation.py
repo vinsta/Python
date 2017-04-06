@@ -1,6 +1,7 @@
 
 import xml.etree.ElementTree as ET
 import collections
+import re
 import tkinter
 import tkinter.ttk
 import tkinter.filedialog
@@ -24,30 +25,52 @@ def ParseNIDD(filename, modict, paramdict):
 	for mo in MOs:
 		params = []
 		moname = mo.attrib["class"]
+		fullname = moname
 		if moname == "EQM":
-			moname = "MRBTS/EQM"
+			fullname = "MRBTS/EQM"
 		elif moname == "MNL":
-			moname = "MRBTS/MNL"
+			fullname = "MRBTS/MNL"
 		elif moname == "LNBTS":
-			moname = "MRBTS/LNBTS"
+			fullname = "MRBTS/LNBTS"
+		for name in modict:
+			pos = name.rfind("/")
+			if pos != -1 and name[pos + 1 :] == moname:
+				fullname = name
+				break
 		minoccursfound = False
 		maxoccursfound = False
+		keystoremove = {}
 		for param in mo:
 			if param.tag == "childManagedObject":
+				mofound = None
 				simplechildmoname = param.attrib["class"]
-				complexchildmoname = "{}/{}".format(moname, simplechildmoname)
+				complexchildmoname = "{}/{}".format(fullname, simplechildmoname)
+				keystoremove.clear()
+				found = False
 				for item in modict:
 					if item == simplechildmoname:
-						modict[complexchildmoname] = modict[item]
-						modict.pop(item)
-						break
+						found = True
+						keystoremove[item] = complexchildmoname
 					else:
 						pos = item.find("/")
 						if pos != -1 and item[: pos] == simplechildmoname:
-							complexchildmoname = item.replace("{}/".format(simplechildmoname), "{}/".format(complexchildmoname))
-							modict[complexchildmoname] = modict[item]
-							modict.pop(item)
-				modict.setdefault(complexchildmoname)
+							newname = item.replace("{}/".format(simplechildmoname), "{}/".format(complexchildmoname))
+							keystoremove[item] = newname
+						else:
+							pos = item.rfind(complexchildmoname)
+							if pos != -1 and item[pos :] == complexchildmoname:
+								found = True
+							pos = item.rfind(simplechildmoname)
+							if pos != -1 and item[pos :] == simplechildmoname:
+								mofound = modict[item]
+				for key in keystoremove:
+					try:
+						modict[keystoremove[key]] = modict[key]
+						modict.pop(key)
+					except KeyError as err:
+						print(err)
+				if found is False:
+					modict[complexchildmoname] = mofound
 				continue
 			elif param.tag != "p":
 				continue
@@ -70,18 +93,18 @@ def ParseNIDD(filename, modict, paramdict):
 
 			paramdict["{}-{}".format(moname, paramname)] = GetParamDetail(param)
 
-		found = False
+		fullnamefound = False
 		for item in modict:
-			pos = item.rfind("/")
-			if pos != -1 and item[pos + 1 :] == moname:
-				found = True
+			pos = item.rfind(fullname)
+			if pos != -1 and item[pos :] == fullname:
+				fullnamefound = True
 				modict[item] = Mo(minoccurs, maxoccurs, params)
 				break
-		if found is False:
-				modict[moname] = Mo(minoccurs, maxoccurs, params)
+		if fullnamefound is False:
+				modict[fullname] = Mo(minoccurs, maxoccurs, params)
 
-		for mo in modict:
-			print("{}:{}".format(mo, modict[mo]))
+		#for mo in modict:
+			#print("{}:{}".format(mo, modict[mo]))
 
 
 def GetParamDetail(param):
@@ -178,7 +201,7 @@ def OnValidate():
 	#for param in paramdict:
 		#print("{}:{}".format(param, paramdict[param]))
 	
-	#ValidateSCF(scfVar.get())
+	ValidateSCF(scfVar.get())
 	tkinter.messagebox.showinfo(title = "Information", message = "SCF validation complete!")
 
 def ValidateSCF(scf):
@@ -202,25 +225,26 @@ def ValidateSCF(scf):
 			classname = classname[classname.rindex(":") + 1 :]
 			distname = mo.attrib["distName"]
 			if distname.find("/FTM-") != -1 or classname.find("_R") != -1:
-				#print("FTM class or subclass, ignored!")
+				#print("FTM class or subclass or _R class, ignored!")
 				continue
-			instanceid = distname[distname.rindex("-") + 1 :]
-			result = ValidateInstanceId(classname, int(instanceid), logfile)
+			#fullclsname, number = re.subn("-[0-9]*", "", distname)
+			result = ValidateInstanceId(classname, distname, logfile)
 			if result is True:
 				for param in mo:
-					key = "{}-{}".format(classname, param.attrib["name"])
-					ValidateParamValue(key, param, logfile)
+					#key = "{}-{}".format(classname, param.attrib["name"])
+					ValidateParamValue(classname, distname, param.attrib["name"], param, logfile)
 
-			ValidateMandatoryParams(classname, mo, logfile)
+			ValidateMandatoryParams(classname, distname, mo, logfile)
 	logfile.write("{} validation end\n".format(logfilename))
 	logfile.close()
 
-def ValidateMandatoryParams(moname, mo, logfile):
+def ValidateMandatoryParams(clsname, distname, mo, logfile):
 	try:
-		for paramname in modict[moname].params:
+		fullclsname, number = re.subn("-[0-9]*", "", distname)
+		for paramname in modict[fullclsname].params:
 			if paramname == "instanceid":
 				continue
-			key = "{}-{}".format(moname, paramname)
+			key = "{}-{}".format(clsname, paramname)
 			if paramdict[key].mandatory is True:
 				found = False
 				for param in mo:
@@ -228,7 +252,7 @@ def ValidateMandatoryParams(moname, mo, logfile):
 						found = True
 						break
 				if found is False:
-					logfile.write("mandatory parameter {} is missing!\n".format(key))
+					logfile.write("mandatory parameter {}-{} is missing!\n".format(distname, paramname))
 			if paramdict[key].type == "list":
 				for value in paramdict[key].values:
 					if value.mandatory is True:
@@ -241,25 +265,27 @@ def ValidateMandatoryParams(moname, mo, logfile):
 											found = True
 											break
 								if found is False:
-									logfile.write("mandatory parameter {}-{} is missing!\n".format(key, value.name))
+									logfile.write("mandatory parameter {}-{}-{} is missing!\n".format(distname, paramname, value.name))
 	except KeyError as err:
 		print("Unknown object {}!".format(err))
 		#logfile.write("Unknown parammeter {}!\n".format(err))
 
-def ValidateInstanceId(classname, instid, logfile):
+def ValidateInstanceId(clsname, distname, logfile):
 	result = True
-	key = "{}-{}".format(classname, "instanceid")
+	instid = int(distname[distname.rindex("-") + 1 :])
+	key = "{}-{}".format(clsname, "instanceid")
 	try:
 		if not paramdict[key].min <= instid <= paramdict[key].max:
-			logfile.write("{} instance id {} exceeds range {}-{}!\n".format(classname, instid, paramdict[key].min, paramdict[key].max))
+			logfile.write("{} instance id {} exceeds range {}-{}!\n".format(distname, instid, paramdict[key].min, paramdict[key].max))
 			result = False
 	except KeyError:
-		logfile.write("Unknown object {}!\n".format(classname))
+		logfile.write("Unknown object {}!\n".format(distname))
 		result = False
 	return result
 
-def ValidateParamValue(key, param, logfile, islist = False):
+def ValidateParamValue(classname, distname, name, param, logfile, islist = False):
 	paramname = param.attrib["name"]
+	key = "{}-{}".format(classname, name)
 	try:
 		if islist is True:
 			for item in paramdict[key].values:
@@ -277,23 +303,23 @@ def ValidateParamValue(key, param, logfile, islist = False):
 
 		if  paramtype == "decimal":
 			if not  minval <= int(param.text) <= maxval and param.text not in special:
-				logfile.write("{}-{} value {} exceeds range {}-{}!\n".format(key, paramname, param.text, minval, maxval))
+				logfile.write("{}-{}-{} value {} exceeds range {}-{}!\n".format(distname, name, paramname, param.text, minval, maxval))
 		elif paramtype == "string":
 			if not minval <= len(param.text) <= maxval and param.text not in special:
-				logfile.write("{}-{} value length {} exceeds range {}-{}!\n".format(key, paramname, len(param.text), minval, maxval))
+				logfile.write("{}-{}-{} value length {} exceeds range {}-{}!\n".format(distname, name, paramname, len(param.text), minval, maxval))
 		elif paramtype == "boolean":
 			if param.text not in ("true", "false"):
-				logfile.write("{}-{} value {} is not 'true' or 'false'!\n".format(key, paramname, param.text))
+				logfile.write("{}-{}-{} value {} is not 'true' or 'false'!\n".format(distname, name, paramname, param.text))
 		elif paramtype == "enumeration":
 			if param.text not in special:
-				logfile.write("{}-{} value {} is not in range {}!\n".format(key, paramname, param.text, special))
+				logfile.write("{}-{}-{} value {} is not in range {}!\n".format(distname, name, paramname, param.text, special))
 		elif paramtype == "bit":
 			if (int(param.text) & 0xFFFF) > maxval:
-				logfile.write("{}-{} value {} is not in range {}!\n".format(key, paramname, param.text, special))
+				logfile.write("{}-{}-{} value {} is not in range {}!\n".format(distname, name, paramname, param.text, special))
 		elif paramtype == "list":
 			for item in param.findall("{raml21.xsd}item"):
 				for listparam in item:
-					ValidateParamValue(key, listparam, logfile, True)
+					ValidateParamValue(classname, distname, paramname, listparam, logfile, True)
 	except KeyError:
 		logfile.write("Unknown parameter {}\n".format(key))
 		#print("{} does not exist".format(key))
