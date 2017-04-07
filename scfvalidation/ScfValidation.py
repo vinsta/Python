@@ -216,9 +216,14 @@ def ValidateSCF(scf):
 		print(err)
 		return
 
-	cmdata = root.findall("{raml21.xsd}cmData")
+	ns = re.match("\{.*\}", root.tag)
+	if ns is not None:
+		ns = ns.group(0)
+	else:
+		ns = None
+	cmdata = root.findall("{}cmData".format(ns))
 	for data in cmdata:
-		MOs = data.findall("{raml21.xsd}managedObject")
+		MOs = data.findall("{}managedObject".format(ns))
 		for mo in MOs:
 			classname =  mo.attrib["class"]
 			classname = classname[classname.rindex(":") + 1 :]
