@@ -14,6 +14,7 @@ Param = collections.namedtuple("Param", "name mandatory type min max values")
 Mo = collections.namedtuple("Mo", "minoccurs maxoccurs params")
 modict = {}
 paramdict = {}
+global textview
 
 def ParseNIDD(niddpath):
 	modict.clear()
@@ -416,6 +417,9 @@ def ValidateParamValue(logfile, classname, distname, name, param, islist = False
 def WriteLog(logfile, text):
 	logfile.write(text)
 	logfile.write("-" * 50 + "\n")
+	if textview is not None:
+		textview.insert("current", text)
+		textview.insert("current", "-" * 50 + "\n")	
 
 '''
 def WriteLog(text):
@@ -426,45 +430,38 @@ def WriteLog(text):
 
 if __name__=='__main__':
 
-	def SelectDir(var):
-		#filename = tkinter.filedialog.askopenfilename(filetypes=[("xml file", "*.xml")])
-		dirname = tkinter.filedialog.askdirectory()
-		#filename = "{}{}".format(filename, "/log.txt")
-		var.set(dirname)
-
-	def OnValidate():
-		global textview
-		textview.delete(1.0, "end")
-
-		if niddpath.get() == "" or scfpath.get() == "":
-			print("SCF or file is not selected!!!")
-			tkinter.messagebox.showinfo(title = "Information", message = "NIDD or SCF directory is not specified!")
-			return
-
-		result = ParseNIDD(niddpath.get())
-		
-		#for mo in modict:
-			#print("{}:{}".format(mo, modict[mo]))
-		#for param in paramdict:
-			#print("{}:{}".format(param, paramdict[param]))
-		
-		if result is True:
-			ValidateSCF(scfpath.get())
-
-		if result is True:
-			message = "SCF validation complete!"
-		else:
-			message = "SCF validation failure!"
-		tkinter.messagebox.showinfo(title = "Information", message = message)
-	'''
-	def ExportLog():
-		global textview
-		filename = 	tkinter.filedialog.asksaveasfilename()
-		logfile = open(filename, "w", encoding = "utf8")
-		logfile.write(textview.get(0.0, "end"))
-		logfile.close()
-	'''
 	def RunGuiMode():
+		global textview
+		def SelectDir(var):
+			#filename = tkinter.filedialog.askopenfilename(filetypes=[("xml file", "*.xml")])
+			dirname = tkinter.filedialog.askdirectory()
+			#filename = "{}{}".format(filename, "/log.txt")
+			var.set(dirname)
+
+		def OnValidate():
+			textview.delete(1.0, "end")
+
+			if niddpath.get() == "" or scfpath.get() == "":
+				print("SCF or file is not selected!!!")
+				tkinter.messagebox.showinfo(title = "Information", message = "NIDD or SCF directory is not specified!")
+				return
+
+			result = ParseNIDD(niddpath.get())
+			
+			#for mo in modict:
+				#print("{}:{}".format(mo, modict[mo]))
+			#for param in paramdict:
+				#print("{}:{}".format(param, paramdict[param]))
+			
+			if result is True:
+				ValidateSCF(scfpath.get())
+
+			if result is True:
+				message = "SCF validation complete!"
+			else:
+				message = "SCF validation failure!"
+			tkinter.messagebox.showinfo(title = "Information", message = message)
+		
 		root = tkinter.Tk()
 		root.title("SCF Validator")
 		root.columnconfigure(1, weight = 1)
@@ -486,10 +483,12 @@ if __name__=='__main__':
 		root.mainloop()
 
 	def RunCmdMode(param):
+		global textview
 		if len(param) < 3 or param[1] in {"-h", "--help"}:
 			print("usage:{} niddpath scfpath".format(sys.argv[0]))
 			sys.exit()
 
+		textview = None
 		if ParseNIDD(param[1]) is True:
 			ValidateSCF(param[2])
 			print("All SCF validation complete!!!")
